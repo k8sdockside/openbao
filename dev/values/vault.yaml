@@ -1,0 +1,17 @@
+# HashiCorp Vault in dev mode, for dev/up.sh. Chart vault 0.34.1
+# (https://helm.releases.hashicorp.com), Vault 2.0.4.
+#
+# One in-memory node, unsealed at start with the root token "root". Dev mode
+# runs without the chart's config file, so there is no service registration
+# and its pod carries no vault-* labels: the plugin learns its seal state from
+# the API instead, which is worth seeing too.
+#
+# Its injector is off: OpenBao's injector already answers for the
+# vault.hashicorp.com annotations, and two webhooks for one annotation would
+# fight over every pod.
+server:
+  dev:
+    enabled: true
+    devRootToken: root
+injector:
+  enabled: false

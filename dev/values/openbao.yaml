@@ -1,0 +1,47 @@
+# OpenBao, three raft nodes, for dev/up.sh. Chart openbao 0.29.6
+# (https://openbao.github.io/openbao-helm), OpenBao 2.6.3.
+#
+# Differences from the chart's own HA example, and why:
+#  - the pods may share a node: kind is one node, and the chart's default
+#    anti-affinity would leave two of the three Pending forever;
+#  - retry_join names every pod, so the followers join the leader as soon as
+#    they are unsealed, with nothing to run by hand;
+#  - service_registration "kubernetes" is kept: it is what labels each pod
+#    openbao-sealed, openbao-active and the rest, which the plugin reads.
+server:
+  affinity: ""
+  dataStorage:
+    size: 1Gi
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+
+        storage "raft" {
+          path = "/openbao/data"
+          retry_join {
+            leader_api_addr = "http://openbao-0.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-1.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-2.openbao-internal:8200"
+          }
+        }
+
+        service_registration "kubernetes" {}
+
+injector:
+  enabled: true
+  affinity: ""

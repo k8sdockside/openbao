@@ -1,0 +1,35 @@
+# Billing: a pod that gets its secrets from the agent injector instead. The
+# annotations name a role and a path -- metadata the plugin reads -- and the
+# agent renders the secret into /vault/secrets/config inside the pod.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: billing
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoicer
+  namespace: billing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: invoicer
+  template:
+    metadata:
+      labels:
+        app: invoicer
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: billing
+        vault.hashicorp.com/agent-inject-secret-config: secret/data/billing/config
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{- with secret "secret/data/billing/config" -}}
+          INVOICE_API={{ .Data.data.api }}
+          {{- end }}
+    spec:
+      containers:
+        - name: invoicer
+          image: busybox:1.37
+          command: ["sh", "-c", "sleep 1000000"]

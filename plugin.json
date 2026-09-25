@@ -1,0 +1,155 @@
+{
+    "$schema": "https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/docs/plugin.schema.json",
+    "id": "openbao",
+    "name": "OpenBao & Vault",
+    "version": "1.0.0",
+    "minAppVersion": "0.1.12",
+    "tagline": "Seal state, HA leaders, and which workloads get which secrets, for OpenBao and HashiCorp Vault",
+    "icon": "lock",
+    "logo": "logo.svg",
+    "category": "security",
+    "docs": "https://openbao.org/docs/platform/k8s/",
+    "author": "K8s Dockside",
+    "authorUrl": "https://github.com/k8sdockside",
+    "links": [
+        { "label": "openbao.org", "url": "https://openbao.org" },
+        { "label": "OpenBao on Kubernetes", "url": "https://openbao.org/docs/platform/k8s/" },
+        { "label": "Vault on Kubernetes", "url": "https://developer.hashicorp.com/vault/docs/platform/k8s" },
+        { "label": "Vault Secrets Operator", "url": "https://developer.hashicorp.com/vault/docs/platform/k8s/vso" },
+        { "label": "OpenBao on GitHub", "url": "https://github.com/openbao/openbao" },
+        { "label": "Plugin source", "url": "https://github.com/k8sdockside/openbao" }
+    ],
+    "description": "OpenBao and HashiCorp Vault keep secrets behind a seal: a server that restarts comes back sealed and serves nothing until enough key holders unseal it, and an HA cluster serves from one leader with standbys waiting. This plugin tells the two products apart on its own and shows both the same way.\n\nThe Dashboard has a card per server cluster with a padlock, open or shut, the unseal keys as slots, and the cluster's shape with its leader, and lists what needs a person worst first: a sealed node, a server nobody has initialised, a missing leader, a failing sync, an injector that is down, a certificate about to expire. Servers draws one cluster node by node and says in plain words how to unseal it, with the command to run; the plugin itself never touches a key or a token. Secret flow draws who gets what: from the server, through the login, the Vault Secrets Operator object, External Secrets store, CSI class or agent injector, to the Kubernetes Secret (by name only) and the workloads that use it. Certificates & leases puts every PKI certificate and dynamic lease on a timeline.\n\nServer pods, every other pod and the Secrets Operator's objects each get a panel. It reads the servers' unauthenticated status endpoints through the API server, and can write one thing, a \"Sync now\" annotation on a Secrets Operator object, each time shown to you first.",
+
+    "requires": [
+        { "kind": "pods", "label": "OpenBao or Vault server pods", "selector": "component=server,app.kubernetes.io/name in (openbao,vault)" },
+        { "kind": "crd:vaultstaticsecrets.secrets.hashicorp.com", "label": "Vault Secrets Operator", "optional": true },
+        { "kind": "crd:vaultdynamicsecrets.secrets.hashicorp.com", "label": "Dynamic secrets", "optional": true },
+        { "kind": "crd:vaultpkisecrets.secrets.hashicorp.com", "label": "PKI secrets", "optional": true },
+        { "kind": "crd:vaultauths.secrets.hashicorp.com", "label": "Vault auths", "optional": true },
+        { "kind": "crd:vaultconnections.secrets.hashicorp.com", "label": "Vault connections", "optional": true },
+        { "kind": "crd:externalsecrets.external-secrets.io", "label": "External Secrets", "optional": true },
+        { "kind": "crd:secretproviderclasses.secrets-store.csi.x-k8s.io", "label": "Secrets Store CSI classes", "optional": true }
+    ],
+
+    "overview": { "entry": "overview.html" },
+
+    "views": [
+        {
+            "id": "cluster",
+            "label": "Servers",
+            "icon": "server",
+            "type": "custom",
+            "entry": "cluster.html",
+            "focus": { "kind": "statefulsets" }
+        },
+        { "id": "flow", "label": "Secret flow", "icon": "share", "type": "custom", "entry": "flow.html" },
+        { "id": "expiry", "label": "Certificates & leases", "icon": "certificate", "type": "custom", "entry": "expiry.html" },
+
+        { "id": "server-pods", "label": "Server pods", "icon": "server", "kind": "pods", "selector": "component=server,app.kubernetes.io/name in (openbao,vault)" },
+        { "id": "static-secrets", "label": "Static secrets", "icon": "lock", "kind": "crd:vaultstaticsecrets.secrets.hashicorp.com" },
+        { "id": "dynamic-secrets", "label": "Dynamic secrets", "icon": "repeat", "kind": "crd:vaultdynamicsecrets.secrets.hashicorp.com" },
+        { "id": "pki-secrets", "label": "PKI secrets", "icon": "certificate", "kind": "crd:vaultpkisecrets.secrets.hashicorp.com" },
+        { "id": "auths", "label": "Vault auths", "icon": "user", "kind": "crd:vaultauths.secrets.hashicorp.com" },
+        { "id": "auth-globals", "label": "Vault auth globals", "icon": "users", "kind": "crd:vaultauthglobals.secrets.hashicorp.com" },
+        { "id": "connections", "label": "Vault connections", "icon": "link", "kind": "crd:vaultconnections.secrets.hashicorp.com" },
+        { "id": "injectors", "label": "Agent injectors", "icon": "webhook", "kind": "deployments", "selector": "component=webhook" }
+    ],
+
+    "cards": [
+        {
+            "label": "Static secrets",
+            "kind": "crd:vaultstaticsecrets.secrets.hashicorp.com",
+            "groupBy": "status.conditions[Ready]",
+            "tones": { "True": "ok", "False": "error" }
+        },
+        {
+            "label": "Dynamic secrets",
+            "kind": "crd:vaultdynamicsecrets.secrets.hashicorp.com",
+            "groupBy": "status.conditions[Ready]",
+            "tones": { "True": "ok", "False": "error" }
+        },
+        {
+            "label": "PKI secrets",
+            "kind": "crd:vaultpkisecrets.secrets.hashicorp.com",
+            "groupBy": "status.conditions[Ready]",
+            "tones": { "True": "ok", "False": "error" }
+        }
+    ],
+
+    "charts": [
+        {
+            "id": "unsealed",
+            "label": "Unsealed nodes",
+            "attach": "overview",
+            "unit": "count",
+            "legend": "namespace",
+            "description": "Server nodes reporting vault_core_unsealed = 1, per namespace. OpenBao keeps Vault's metric names, so one query covers both. Needs telemetry scraped by Prometheus (the charts' serverTelemetry and ServiceMonitor).",
+            "query": "sum by (namespace) (vault_core_unsealed)"
+        },
+        {
+            "id": "leases",
+            "label": "Leases",
+            "attach": "overview",
+            "unit": "count",
+            "legend": "namespace",
+            "description": "Leases the servers are tracking (vault_expire_num_leases), from the active node of each cluster. A count that only grows means leases are issued and never revoked.",
+            "query": "max by (namespace) (vault_expire_num_leases)"
+        },
+        {
+            "id": "active",
+            "label": "Active nodes",
+            "attach": "overview",
+            "unit": "count",
+            "legend": "namespace",
+            "description": "Nodes reporting vault_core_active = 1, per namespace. An HA cluster should have exactly one; zero means no leader.",
+            "query": "sum by (namespace) (vault_core_active)"
+        },
+        {
+            "id": "pod-unsealed",
+            "label": "Unsealed",
+            "attach": "pods",
+            "unit": "count",
+            "description": "1 while this server pod is unsealed, 0 while it is sealed (vault_core_unsealed). Empty for any pod that is not an OpenBao or Vault server with telemetry on.",
+            "query": "max(vault_core_unsealed{namespace=\"$namespace\", pod=\"$name\"})"
+        }
+    ],
+
+    "sections": [
+        { "id": "pod-secrets", "label": "OpenBao & Vault", "kind": "pods", "entry": "pod.html", "height": 110 },
+        { "id": "static-sync", "label": "Sync", "kind": "crd:vaultstaticsecrets.secrets.hashicorp.com", "entry": "vso.html", "height": 240 },
+        { "id": "dynamic-sync", "label": "Sync", "kind": "crd:vaultdynamicsecrets.secrets.hashicorp.com", "entry": "vso.html", "height": 260 },
+        { "id": "pki-sync", "label": "Sync", "kind": "crd:vaultpkisecrets.secrets.hashicorp.com", "entry": "vso.html", "height": 260 }
+    ],
+
+    "ui": {
+        "kinds": [
+            "pods",
+            "statefulsets",
+            "deployments",
+            "nodes",
+            "mutatingwebhookconfigurations",
+            "crd:vaultconnections.secrets.hashicorp.com",
+            "crd:vaultauths.secrets.hashicorp.com",
+            "crd:vaultauthglobals.secrets.hashicorp.com",
+            "crd:vaultstaticsecrets.secrets.hashicorp.com",
+            "crd:vaultdynamicsecrets.secrets.hashicorp.com",
+            "crd:vaultpkisecrets.secrets.hashicorp.com",
+            "crd:secretstores.external-secrets.io",
+            "crd:clustersecretstores.external-secrets.io",
+            "crd:externalsecrets.external-secrets.io",
+            "crd:secretproviderclasses.secrets-store.csi.x-k8s.io"
+        ],
+        "write": true,
+        "services": [
+            { "id": "bao-active", "label": "OpenBao, the active node", "selector": "openbao-active=true", "port": "http", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] },
+            { "id": "bao-active-tls", "label": "OpenBao, the active node (TLS)", "selector": "openbao-active=true", "port": "https", "scheme": "https", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] },
+            { "id": "bao", "label": "OpenBao", "selector": "app.kubernetes.io/name=openbao,!openbao-active,!openbao-internal", "port": "http", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] },
+            { "id": "bao-tls", "label": "OpenBao (TLS)", "selector": "app.kubernetes.io/name=openbao,!openbao-active,!openbao-internal", "port": "https", "scheme": "https", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] },
+            { "id": "vault-active", "label": "Vault, the active node", "selector": "vault-active=true", "port": "http", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] },
+            { "id": "vault-active-tls", "label": "Vault, the active node (TLS)", "selector": "vault-active=true", "port": "https", "scheme": "https", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] },
+            { "id": "vault", "label": "Vault", "selector": "app.kubernetes.io/name=vault,!vault-active,!vault-internal", "port": "http", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] },
+            { "id": "vault-tls", "label": "Vault (TLS)", "selector": "app.kubernetes.io/name=vault,!vault-active,!vault-internal", "port": "https", "scheme": "https", "paths": ["/v1/sys/seal-status", "/v1/sys/health", "/v1/sys/leader"] }
+        ]
+    }
+}

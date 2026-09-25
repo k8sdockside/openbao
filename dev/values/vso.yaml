@@ -1,0 +1,11 @@
+# The Vault Secrets Operator, for dev/up.sh. Chart vault-secrets-operator
+# 1.6.0 (https://helm.releases.hashicorp.com). It works against OpenBao the
+# same as against Vault.
+#
+# Its default VaultConnection points at OpenBao's main Service. The demo's
+# own objects in dev/manifests name their connection and auth explicitly, so
+# the plugin has both kinds of reference to follow.
+defaultVaultConnection:
+  enabled: true
+  address: http://openbao.openbao.svc.cluster.local:8200
+  skipTLSVerify: false

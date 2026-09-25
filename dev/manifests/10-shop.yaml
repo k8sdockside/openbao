@@ -1,0 +1,116 @@
+# The shop: secrets synced by the Vault Secrets Operator, and a Deployment
+# that uses them.
+#
+#   app-config    a kv-v2 secret that exists: synced
+#   stripe-keys   a path that does not exist: the sync fails, on purpose
+#   web-tls       a certificate from OpenBao's PKI engine, reissued an hour
+#                 before it expires
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultConnection
+metadata:
+  name: openbao
+  namespace: shop
+spec:
+  address: http://openbao.openbao.svc.cluster.local:8200
+  skipTLSVerify: false
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  vaultConnectionRef: openbao
+  method: kubernetes
+  mount: kubernetes
+  kubernetes:
+    role: shop
+    serviceAccount: default
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: app-config
+  namespace: shop
+spec:
+  vaultAuthRef: shop
+  mount: secret
+  type: kv-v2
+  path: shop/config
+  refreshAfter: 30s
+  destination:
+    name: app-config
+    create: true
+  rolloutRestartTargets:
+    - kind: Deployment
+      name: web
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: stripe-keys
+  namespace: shop
+spec:
+  vaultAuthRef: shop
+  mount: secret
+  type: kv-v2
+  # Nothing is written here: this one fails, so the plugin has a failing sync to show.
+  path: shop/stripe
+  refreshAfter: 30s
+  destination:
+    name: stripe-keys
+    create: true
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultPKISecret
+metadata:
+  name: web-tls
+  namespace: shop
+spec:
+  vaultAuthRef: shop
+  mount: pki
+  role: web
+  commonName: web.shop.svc
+  ttl: 24h
+  expiryOffset: 1h
+  destination:
+    name: web-tls
+    create: true
+    type: kubernetes.io/tls
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.37
+          command: ["sh", "-c", "sleep 1000000"]
+          envFrom:
+            - secretRef:
+                name: app-config
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: web-tls
+            optional: true
